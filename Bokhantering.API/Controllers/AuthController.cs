@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿// Controllers/AuthController.cs
+using Microsoft.AspNetCore.Mvc;
 using Bokhantering.API.Models;
 using Bokhantering.API.Data;
 using System.IdentityModel.Tokens.Jwt;
@@ -9,14 +10,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using BCrypt.Net;
 
-
 namespace Bokhantering.API.Controllers
 {
-
     [Route("api/[controller]")]
     [ApiController]
-
-
     public class AuthController : ControllerBase
     {
         private readonly BokhanteringDbContext _context;
@@ -28,20 +25,28 @@ namespace Bokhantering.API.Controllers
             _configuration = configuration;
         }
 
+        // POST-metod för att registrera nya användare.
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] User user)
+        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
-            if (await _context.Users.AnyAsync(u => u.Username == user.Username))
+            if (await _context.Users.AnyAsync(u => u.Username == request.Username))
             {
                 return BadRequest(new { message = "Användarnamnet är redan upptaget." });
             }
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.PasswordHash);
 
-            _context.Users.Add(user);
+            var newUser = new User
+            {
+                Username = request.Username,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password)
+            };
+
+            _context.Users.Add(newUser);
             await _context.SaveChangesAsync();
+
             return Ok(new { message = "Registrering lyckades!" });
         }
 
+        // POST-metod för att logga in befintliga användare.
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
@@ -51,15 +56,19 @@ namespace Bokhantering.API.Controllers
             {
                 return Unauthorized(new { message = "Ogiltigt användarnamn eller lösenord" });
             }
+
             var tokenHandler = new JwtSecurityTokenHandler();
             var secretKey = _configuration["Jwt:HemligNyckel"];
+
             if (string.IsNullOrEmpty(secretKey))
             {
                 throw new Exception("Jwt-hemlig nyckel är inte konfigurerad en AuthController.");
             }
             var key = Encoding.UTF8.GetBytes(secretKey);
+
             var currentTime = DateTime.UtcNow;
             var expirationTime = currentTime.AddHours(1);
+
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new Claim[]
@@ -74,22 +83,10 @@ namespace Bokhantering.API.Controllers
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
 
-
-
             var token = tokenHandler.CreateToken(tokenDescriptor);
             var tokenString = tokenHandler.WriteToken(token);
 
             return Ok(new { Token = tokenString });
-
-
-
-
-
-
         }
-
     }
 }
-
-    
-
